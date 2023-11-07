@@ -1,0 +1,120 @@
+# Compiled class file
+*.class
+
+# Log file
+*.log
+
+# BlueJ files
+*.ctxt
+
+# Mobile Tools for Java (J2ME)
+.mtj.tmp/
+
+# Package Files #
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+hs_err_pid*
+
+# Directory for IDE - IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+
+
+# Directory for NetBeans
+/nbproject/private/
+/build/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Local development
+*.swp
+*~
+.project
+.metadata
+bin/
+tmp/
+*.tmp
+*.bak
+*.swp
+*.save
+
+# Virtual Machine files
+*.vmx
+*.vmdk
+*.vbox
+
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+
+# Gradle
+.gradle
+/build/
+
+# Others
+*.log
+
+# Local configuration file (if you use one for your IDE or your JAVA_HOME etc)
+.local.properties
+
+# Security
+*.jks
+*.keystore
+
+# External tool builders
+.externalToolBuilders/
+
+# Locally stored "Eclipse launch configurations"
+*.launch
+
+# PyDev specific (Python IDE for Eclipse)
+*.pydevproject
+
+# CDT-specific (C/C++ Development Tooling)
+.cproject
+
+# C/C++-specific
+.settings/
+*.cproject
+*.lo
+*.o
+*.obj
+*.pyc
+*.pyo
+*.rej
+*.swo
+*.swp
+*.user
+*.userprefs
+*.users
+*.vps
+*.vspscc
+*_i.c
+*_p.c
+*~.nib
+.local
+.server
+/cmake-build-debug/
+
+# Java-specific
+hs_err_pid*
