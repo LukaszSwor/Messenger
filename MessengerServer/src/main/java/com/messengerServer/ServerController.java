@@ -4,22 +4,17 @@ import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
-import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
-import javafx.scene.text.Text;
-import javafx.scene.text.TextFlow;
 import javafx.stage.FileChooser;
-
 import java.io.*;
 import java.net.*;
 import java.nio.file.Files;
 import java.util.ResourceBundle;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * The ServerController class is responsible for handling the server-side functionality
@@ -28,6 +23,7 @@ import java.util.ResourceBundle;
  */
 public class ServerController implements Initializable {
 
+    private static final int SERVER_PORT = 1234;
     @FXML
     private Button button_send_file;
     @FXML
@@ -41,15 +37,14 @@ public class ServerController implements Initializable {
     private Socket socket;
     private DataOutputStream outputStream;
     private DataInputStream inputStream;
+    private MessageDisplayService messageDisplayService;
+    private NetworkService networkService;
+    private static final Logger logger = Logger.getLogger(ServerController.class.getName());
 
-    /**
-     * @param url            The location used to resolve relative paths for the root object, or null if the location is not known.
-     * @param resourceBundle The resources used to localize the root object, or null if the root object was not localized.
-     */
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
         initializeServer();
-
+        messageDisplayService = new MessageDisplayService(vbox_messages);
         vbox_messages.heightProperty().addListener((observableValue, number, t1) -> sp_main.setVvalue((Double) t1));
         button_send.setOnAction(this::handleSendMessage);
         button_send_file.setOnAction(this::handleSendFile);
@@ -57,193 +52,120 @@ public class ServerController implements Initializable {
     }
 
     private void initializeServer() {
-        int serverPort = 1234;
-        System.out.println("Server waiting for connection on port: " + serverPort);
         try {
-            ServerSocket serverSocket = new ServerSocket(1234);
-            this.socket = serverSocket.accept();
-            this.outputStream = new DataOutputStream(socket.getOutputStream());
-            this.inputStream = new DataInputStream(socket.getInputStream());
-            System.out.println("Client connected on port: " + serverPort);
+            ServerSocket serverSocket = createServerSocket();
+            acceptClientConnection(serverSocket);
+            networkService = new NetworkService(outputStream, inputStream);
         } catch (IOException e) {
             handleServerError("Error creating server", e);
         }
     }
 
-    /**
-     * @param actionEvent The event that triggered the send action.
-     */
+    private ServerSocket createServerSocket() throws IOException {
+        logger.info("Server waiting for connection on port: " + ServerController.SERVER_PORT);
+        return new ServerSocket(ServerController.SERVER_PORT);
+    }
+
+    private void acceptClientConnection(ServerSocket serverSocket) throws IOException {
+        this.socket = serverSocket.accept();
+        logger.info("Client connected on port: " + serverSocket.getLocalPort());
+        this.outputStream = new DataOutputStream(socket.getOutputStream());
+        this.inputStream = new DataInputStream(socket.getInputStream());
+    }
+
     private void handleSendMessage(ActionEvent actionEvent) {
         String messageToSend = tf_message.getText();
         if (!messageToSend.isEmpty()) {
-            messageViewSetUp(messageToSend);
-            sendMessageToClient(messageToSend);
-            tf_message.clear();
+            processAndSendMessage(messageToSend);
         }
     }
 
-    /**
-     * @param actionEvent The event that triggered the send file action.
-     */
-    private void handleSendFile(ActionEvent actionEvent) {
-        FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Choose file");
-        File fileToSend = fileChooser.showOpenDialog(null);
+    private void processAndSendMessage(String message) {
+        messageDisplayService.addMessageToDisplay(message, true);
+        sendMessageToClient(message);
+        tf_message.clear();
+    }
 
+    private void handleSendFile(ActionEvent actionEvent) {
+        File fileToSend = chooseFile();
         if (fileToSend != null) {
             sendFileToClient(fileToSend);
         }
     }
 
-    /**
-     * @param errorMessage The error message to be logged to the console.
-     * @param exception    The exception that triggered the error handling.
-     */
-    private void handleServerError(String errorMessage, Exception exception) {
-        System.out.println(errorMessage);
-        exception.printStackTrace();
-        closeEverything(socket, outputStream, inputStream);
+    private File chooseFile(){
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Choose file");
+        return fileChooser.showOpenDialog(null);
     }
 
-    /**
-     * @param vBox The VBox container where the messages from the client will be displayed.
-     */
-    private void receiveMessageFromClient(VBox vBox) {
-        new Thread(() -> {
-            try {
-                while (socket.isConnected()) {
-                    String messageFromClient = inputStream.readUTF();
-                    if (messageFromClient.equals("FILE:")) {
-                        receiveAndSaveFile();
-                    } else {
-                        addLabel(messageFromClient, vBox);
-                    }
-                }
-            } catch (IOException e) {
-                handleServerError("Error receiving message from Client", e);
-            }
-        }).start();
-    }
-
-    /**
-     * @throws IOException If an I/O error occurs while receiving the file.
-     */
-    private void receiveAndSaveFile() throws IOException {
-        int fileNameLength = inputStream.readInt();
-        byte[] fileNameBytes = new byte[fileNameLength];
-        inputStream.readFully(fileNameBytes);
-        String fileName = new String(fileNameBytes);
-
-        int fileContentLength = inputStream.readInt();
-        byte[] fileContentBytes = new byte[fileContentLength];
-        inputStream.readFully(fileContentBytes);
-
-        FileOutputStream fileOutputStream = new FileOutputStream(fileName);
-        fileOutputStream.write(fileContentBytes);
-        fileOutputStream.close();
-
-        System.out.println("Received and saved file: " + fileName);
-        addLabel(fileName, vbox_messages);
-    }
-
-    /**
-     * @param messageToSend The message to be sent to the client.
-     */
     private void sendMessageToClient(String messageToSend) {
         try {
-            outputStream.writeUTF(messageToSend);
-            outputStream.flush();
+            networkService.sendMessage(messageToSend);
             tf_message.clear();
         } catch (IOException e) {
             handleServerError("Error sending message to the client", e);
         }
     }
 
-    /**
-     * @param fileToSend The file that needs to be sent to the client.
-     */
     private void sendFileToClient(File fileToSend) {
         try {
-            File imageFile = new File(fileToSend.getAbsolutePath());
-            String fileName = fileToSend.getName();
-            byte[] fileNameBytes = fileName.getBytes();
-            byte[] fileBytes = Files.readAllBytes(imageFile.toPath());
-            outputStream.writeUTF("FILE:");
-            outputStream.writeInt(fileName.length());
-            outputStream.write(fileNameBytes);
-            outputStream.writeInt(fileBytes.length);
-            outputStream.write(fileBytes);
-            outputStream.flush();
-            System.out.println(fileName);
-            messageViewSetUp(fileName);
+            byte[] fileNameBytes = fileToSend.getName().getBytes();
+            byte[] fileContentBytes = Files.readAllBytes(fileToSend.toPath());
+
+            sendMessageToClient("FILE:");
+            networkService.sendFileMetadata(fileNameBytes, fileContentBytes);
+            networkService.sendFileContent(fileContentBytes);
+
+            Platform.runLater(() -> messageDisplayService.addMessageToDisplay(fileToSend.getName(), true));
         } catch (IOException e) {
-            handleServerError("Error sending File to the client", e);
+            handleServerError("Error sending file to the client", e);
         }
     }
 
-    /**
-     * @param messageToSend The message text to be displayed in the server's chat UI.
-     */
-    private void messageViewSetUp(String messageToSend) {
-        if (!messageToSend.isEmpty()) {
-            HBox hBox = new HBox();
-            hBox.setAlignment(Pos.CENTER_RIGHT);
+    private void receiveMessageFromClient(VBox vBox) {
+        new Thread(() -> {
+            try {
+                while (socket.isConnected()) {
+                    String messageFromClient = inputStream.readUTF();
+                    processReceivedMessage(messageFromClient, vBox);
+                }
+            } catch (SocketException e) {
+                logger.log(Level.SEVERE, "Problem z gniazdem", e);
+            } catch (IOException e) {
+                logger.log(Level.SEVERE, "Błąd we/wy", e);
+            }
+        }).start();
+    }
 
-            hBox.setPadding(new Insets(5, 5, 5, 10));
-            Text text = new Text(messageToSend);
-            TextFlow textFlow = new TextFlow(text);
-            textFlow.setStyle("-fx-color: rgb(239,242,255); " +
-                    "-fx-background-color: rgb(15,125,242);" +
-                    "-fx-background-radius: 20px;");
-            textFlow.setPadding(new Insets(5, 10, 5, 10));
-            text.setFill(Color.color(0.934, 0.945, 0.996));
-
-            hBox.getChildren().add(textFlow);
-            vbox_messages.getChildren().add(hBox);
+    private void processReceivedMessage(String message, VBox vBox) throws IOException {
+        if (message.equals("FILE:")) {
+            receiveAndSaveFile();
+        } else {
+            Platform.runLater(() -> messageDisplayService.addMessageToDisplay(message, false));
         }
     }
 
-    /**
-     * @param messageFromClient The message text received from the client.
-     * @param vbox The VBox container where the messages will be displayed.
-     */
-    private static void addLabel(String messageFromClient, VBox vbox) {
-        HBox hBox = new HBox();
-        hBox.setAlignment(Pos.CENTER_LEFT);
-        hBox.setPadding(new Insets(5, 5, 5, 10));
-
-        Text text = new Text(messageFromClient);
-        TextFlow textFlow = new TextFlow(text);
-        textFlow.setStyle("-fx-background-color: rgb(233,233,235);" +
-                "-fx-background-radius: 20px;");
-        textFlow.setPadding(new Insets(5, 10, 5, 10));
-        hBox.getChildren().add(textFlow);
-
-        Platform.runLater(() -> vbox.getChildren().add(hBox));
-    }
-
-    /**
-     * @param socket The socket to be closed.
-     * @param outputStream The output stream to be closed.
-     * @param inputStream The input stream to be closed.
-     */
-    private void closeEverything(Socket socket, DataOutputStream outputStream, DataInputStream inputStream) {
+    private void receiveAndSaveFile() {
         try {
-            if (inputStream != null) {
-                inputStream.close();
-            }
-            if (outputStream != null) {
-                outputStream.close();
-            }
-            if (socket != null) {
-                socket.close();
-            }
+            String fileName = networkService.readFileNameFromClient();
+            byte[] fileContent = networkService.readFileContentFromClient();
+            saveFile(fileName, fileContent);
+            Platform.runLater(() -> messageDisplayService.addMessageToDisplay(fileName, false));
         } catch (IOException e) {
-            e.printStackTrace();
+            handleServerError("Error receiving and saving file from client", e);
         }
+    }
+
+    private void saveFile(String fileName, byte[] fileContent) throws IOException {
+        try (FileOutputStream fileOutputStream = new FileOutputStream(fileName)) {
+            fileOutputStream.write(fileContent);
+        }
+    }
+
+    private void handleServerError(String errorMessage, Exception exception) {
+        System.out.println(errorMessage);
+        logger.log(Level.SEVERE, errorMessage, exception);
+        networkService.closeEverything(socket, outputStream, inputStream);
     }
 }
-
-
-
-
