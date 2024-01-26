@@ -8,10 +8,8 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.VBox;
-import javafx.stage.FileChooser;
 import java.io.*;
 import java.net.*;
-import java.nio.file.Files;
 import java.util.ResourceBundle;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -23,7 +21,6 @@ import java.util.logging.Logger;
  */
 public class ServerController implements Initializable {
 
-    private static final int SERVER_PORT = 1234;
     @FXML
     private Button button_send_file;
     @FXML
@@ -34,43 +31,27 @@ public class ServerController implements Initializable {
     private VBox vbox_messages;
     @FXML
     private ScrollPane sp_main;
-    private Socket socket;
-    private DataOutputStream outputStream;
-    private DataInputStream inputStream;
     private MessageDisplayService messageDisplayService;
     private NetworkService networkService;
+    private ConnectionManager connectionManager;
+    private FileService fileService;
     private static final Logger logger = Logger.getLogger(ServerController.class.getName());
 
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
-        initializeServer();
-        messageDisplayService = new MessageDisplayService(vbox_messages);
-        vbox_messages.heightProperty().addListener((observableValue, number, t1) -> sp_main.setVvalue((Double) t1));
-        button_send.setOnAction(this::handleSendMessage);
-        button_send_file.setOnAction(this::handleSendFile);
-        receiveMessageFromClient(vbox_messages);
-    }
-
-    private void initializeServer() {
+        connectionManager = new ConnectionManager();
         try {
-            ServerSocket serverSocket = createServerSocket();
-            acceptClientConnection(serverSocket);
-            networkService = new NetworkService(outputStream, inputStream);
+            connectionManager.initializeServer();
+            networkService = connectionManager.getNetworkService();
+            messageDisplayService = new MessageDisplayService(vbox_messages);
+            vbox_messages.heightProperty().addListener((observableValue, number, t1) -> sp_main.setVvalue((Double) t1));
+            button_send.setOnAction(this::handleSendMessage);
+            button_send_file.setOnAction(this::handleSendFile);
+            this.fileService = new FileService();
+            receiveMessageFromClient();
         } catch (IOException e) {
             handleServerError("Error creating server", e);
         }
-    }
-
-    private ServerSocket createServerSocket() throws IOException {
-        logger.info("Server waiting for connection on port: " + ServerController.SERVER_PORT);
-        return new ServerSocket(ServerController.SERVER_PORT);
-    }
-
-    private void acceptClientConnection(ServerSocket serverSocket) throws IOException {
-        this.socket = serverSocket.accept();
-        logger.info("Client connected on port: " + serverSocket.getLocalPort());
-        this.outputStream = new DataOutputStream(socket.getOutputStream());
-        this.inputStream = new DataInputStream(socket.getInputStream());
     }
 
     private void handleSendMessage(ActionEvent actionEvent) {
@@ -87,16 +68,10 @@ public class ServerController implements Initializable {
     }
 
     private void handleSendFile(ActionEvent actionEvent) {
-        File fileToSend = chooseFile();
+        File fileToSend = fileService.chooseFile();
         if (fileToSend != null) {
             sendFileToClient(fileToSend);
         }
-    }
-
-    private File chooseFile(){
-        FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Choose file");
-        return fileChooser.showOpenDialog(null);
     }
 
     private void sendMessageToClient(String messageToSend) {
@@ -111,7 +86,7 @@ public class ServerController implements Initializable {
     private void sendFileToClient(File fileToSend) {
         try {
             byte[] fileNameBytes = fileToSend.getName().getBytes();
-            byte[] fileContentBytes = Files.readAllBytes(fileToSend.toPath());
+            byte[] fileContentBytes = fileService.readFileContent(fileToSend);
 
             sendMessageToClient("FILE:");
             networkService.sendFileMetadata(fileNameBytes, fileContentBytes);
@@ -123,22 +98,24 @@ public class ServerController implements Initializable {
         }
     }
 
-    private void receiveMessageFromClient(VBox vBox) {
+    private void receiveMessageFromClient() {
         new Thread(() -> {
             try {
-                while (socket.isConnected()) {
-                    String messageFromClient = inputStream.readUTF();
-                    processReceivedMessage(messageFromClient, vBox);
+                while (true) {
+                    if (connectionManager.isConnected()) {
+                        String messageFromClient = networkService.readMessage();
+                        processReceivedMessage(messageFromClient);
+                    }
                 }
             } catch (SocketException e) {
-                logger.log(Level.SEVERE, "Problem z gniazdem", e);
+                logger.log(Level.SEVERE, "Problem with socket", e);
             } catch (IOException e) {
-                logger.log(Level.SEVERE, "Błąd we/wy", e);
+                logger.log(Level.SEVERE,"Input/output device error", e);
             }
         }).start();
     }
 
-    private void processReceivedMessage(String message, VBox vBox) throws IOException {
+    private void processReceivedMessage(String message) throws IOException {
         if (message.equals("FILE:")) {
             receiveAndSaveFile();
         } else {
@@ -150,22 +127,16 @@ public class ServerController implements Initializable {
         try {
             String fileName = networkService.readFileNameFromClient();
             byte[] fileContent = networkService.readFileContentFromClient();
-            saveFile(fileName, fileContent);
+            fileService.saveFile(fileName, fileContent);
             Platform.runLater(() -> messageDisplayService.addMessageToDisplay(fileName, false));
         } catch (IOException e) {
             handleServerError("Error receiving and saving file from client", e);
         }
     }
 
-    private void saveFile(String fileName, byte[] fileContent) throws IOException {
-        try (FileOutputStream fileOutputStream = new FileOutputStream(fileName)) {
-            fileOutputStream.write(fileContent);
-        }
-    }
-
     private void handleServerError(String errorMessage, Exception exception) {
         System.out.println(errorMessage);
         logger.log(Level.SEVERE, errorMessage, exception);
-        networkService.closeEverything(socket, outputStream, inputStream);
+        connectionManager.closeConnection();
     }
 }

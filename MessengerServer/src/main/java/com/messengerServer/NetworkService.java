@@ -3,7 +3,6 @@ package com.messengerServer;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 
 public class NetworkService {
@@ -47,19 +46,11 @@ public class NetworkService {
         return readDataFromClient();
     }
 
-    public void closeEverything(Socket socket, DataOutputStream outputStream, DataInputStream inputStream){
-        try {
-            if (inputStream != null) {
-                inputStream.close();
-            }
-            if (outputStream != null) {
-                outputStream.close();
-            }
-            if (socket != null) {
-                socket.close();
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
+    public String readMessage() throws IOException {
+        if (inputStream != null) {
+            return inputStream.readUTF();
+        } else {
+            throw new IOException("InputStream is null.");
         }
     }
 }

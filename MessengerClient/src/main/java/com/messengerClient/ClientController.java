@@ -24,6 +24,8 @@ import java.util.logging.Logger;
 public class ClientController implements Initializable {
 
     private static final int SERVER_PORT = 1234;
+    private static final String SERVER_ADDRESS = "localhost";
+
     @FXML
     private Button button_send_file;
     @FXML
@@ -52,21 +54,16 @@ public class ClientController implements Initializable {
     }
 
     private void connectToServer() {
-        String serverAddress = "localhost";
-        int serverPort = 1234;
         try {
-            socket = new Socket(serverAddress, serverPort);
+            socket = new Socket(SERVER_ADDRESS, SERVER_PORT);
             outputStream = new DataOutputStream(socket.getOutputStream());
             inputStream = new DataInputStream(socket.getInputStream());
             networkService = new NetworkService(outputStream, inputStream);
-
-            System.out.println("Connected with server: " + serverAddress + ":" + serverPort);
+            System.out.println("Connected with server: " + SERVER_ADDRESS + ":" + SERVER_PORT);
         } catch (IOException e) {
             handleServerError("Error creating server", e);
         }
     }
-
-
 
     private void handleSendMessage(ActionEvent actionEvent) {
         String messageToSend = tf_message.getText();
