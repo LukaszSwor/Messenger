@@ -43,10 +43,10 @@ To set up the messenger client on your local machine, follow these steps:
 
 1. Open a terminal and navigate to the MessengerServer directory.
 2. Run `mvn clean install` to build the server application.
-3. Start the server with `mvn exec:java -Dexec.mainClass="com.messengerServer.Main"`.
+3. Start the server with `mvn javafx:run`.
 4. Open another terminal and navigate to the MessengerClient directory.
 5. Run `mvn clean install` to build the client application.
-6. Start the client with `mvn exec:java -Dexec.mainClass="com.messengerClient.Main"`.
+6. Start the client with `mvn javafx:run`.
 
 ## Usage
 1. When you launch the client, enter the IP address and port number of the server you wish to connect to (by default, it connects to localhost on port 1234).
